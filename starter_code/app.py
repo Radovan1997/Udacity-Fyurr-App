@@ -55,15 +55,31 @@ class Venue(db.Model):
     website = db.Column(db.String(120))
     seeking_talent = db.Column(db.Boolean, nullable = False,default=False)
     seeking_description = db.Column(db.String(120))
-
-    past_shows_count = db.Column(db.Integer, nullable=False, default = 0)
-    #past_shows = db.relationship('Show', backref= db.backref('venue', lazy = True))
-
-    upcoming_shows_count = db.Column(db.Integer, nullable=False,default =0)
-    #upcoming_shows = db.relationship('Show', backref= db.backref('venue', lazy = True))
-
     genres = db.relationship('Genre',secondary = genre_asoc_venue, backref= db.backref('venue',lazy = True))
-    shows = db.relationship('Show', backref= db.backref('venue', lazy = True)) #temporary
+    shows  = db.relationship('Show', backref= db.backref('venue', lazy = True))
+
+    @property
+    def past_shows(self):
+        now = datetime.now()
+        past_shows = [show for show in self.shows if datetime.strptime(
+            show.start_time, '%Y-%m-%d %H:%M:%S') < now]
+        return past_shows
+
+    @property
+    def upcoming_shows(self):
+        now = datetime.now()
+        future_shows = [show for show in self.shows if datetime.strptime(
+            show.start_time, '%Y-%m-%d %H:%M:%S') > now]
+        return future_shows
+
+    @property
+    def past_shows_count(self):
+        return len(self.past_shows)
+
+    @property
+    def upcoming_shows_count(self):
+        return len(self.upcoming_shows)
+
 
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
@@ -79,14 +95,35 @@ class Artist(db.Model):
     genres = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
-
-    past_shows_count = db.Column(db.Integer, nullable=False, default = 0)
-    #past_shows = db.relationship('Show', backref= db.backref('artist', lazy = True))
-    upcoming_shows_count = db.Column(db.Integer, nullable=False,default =0)
-    #upcoming_shows = db.relationship('Show', backref= db.backref('artist', lazy = True))
-
     genres = db.relationship('Genre',secondary = genre_asoc_art, backref= db.backref('artist',lazy = True))
-    shows  = db.relationship('Show', backref= db.backref('artist', lazy = True))  #temporary
+    shows  = db.relationship('Show', backref= db.backref('artist', lazy = True))
+
+    #Used to get show information
+
+    @property
+    def past_shows(self):
+        now = datetime.now()
+        past_shows = [show for show in self.shows if datetime.strptime(
+            show.start_time, '%Y-%m-%d %H:%M:%S') < now]
+        return past_shows
+
+    @property
+    def upcoming_shows(self):
+        now = datetime.now()
+        future_shows = [show for show in self.shows if datetime.strptime(
+            show.start_time, '%Y-%m-%d %H:%M:%S') > now]
+        return future_shows
+
+    @property
+    def past_shows_count(self):
+        return len(self.past_shows)
+
+    @property
+    def upcoming_shows_count(self):
+        return len(self.upcoming_shows)
+
+
+    
 
 
     
@@ -149,7 +186,7 @@ def venues():
   areas = Venue.query.distinct('city','state').all()
   for area in areas:
     venues = Venue.query.filter(Venue.city==area.city, Venue.state==area.state)
-    record = {
+    record = [{
       "city": area.city,
       "state": area.state,
       "venues": [{
@@ -157,8 +194,8 @@ def venues():
         "name": venue.name,
         "num_upcoming_shows": Show.query.filter(Show.venue_id == venue.id, Show.start_time > datetime.utcnow()).count()
       } for venue in venues]
-    }
-    data.append(record)
+    }]
+    data += record
   return render_template('pages/venues.html', areas=data)
 
 @app.route('/venues/search', methods=['POST'])
@@ -190,29 +227,29 @@ def show_venue(venue_id):
   past_shows = Show.query.filter(Show.venue_id == venue_id, Show.start_time < datetime.utcnow()).all()
   for past_show in past_shows:
     artist = Artist.query.filter_by(id=past_show.artist_id).first()
-    record = {
+    record = [{
       "artist_id": artist.id,
       "artist_name": artist.name,
       "artist_image_link": artist.image_link,
       "start_time": str(past_show.start_time)
-    }
-    data_past.append(record)
+    }]
+    data_past += record
 
   data_upcoming = []
   upcoming_shows = Show.query.filter(Show.venue_id == venue_id, Show.start_time > datetime.utcnow()).all()
   for upcoming_show in upcoming_shows:
     artist = Artist.query.filter_by(id=upcoming_show.artist_id).first()
-    record = {
+    record = [{
       "artist_id": artist.id,
       "artist_name": artist.name,
       "artist_image_link": artist.image_link,
       "start_time": str(upcoming_show.start_time)
-    }
-    data_upcoming.append(record)
+    }]
+    data_upcoming += record
 
   data["past_shows"] = data_past
   data["upcoming_shows"] = data_upcoming
-  data["genres"] = [genre.name for genre in venue.genres]
+  data["genres"] = [g.name for g in venue.genres]
   return render_template('pages/show_venue.html', venue=data)
 
 #  Create Venue
@@ -378,8 +415,8 @@ def edit_artist_submission(artist_id):
     artist.genres = []
 
     genres = data.getlist('genres')
-    for gen in genres:
-      genre = Genre.query.filter(Genre.name == gen).first()
+    for g in genres:
+      genre = Genre.query.filter(Genre.name == g).first()
       artist.genres.append(genre)
 
     db.session.commit()
@@ -478,8 +515,9 @@ def create_artist_submission():
     db.session.add(artist)
 
     genres = data.getlist('genres')
-    for new_genres in genres:
-      genre = Genre.query.filter(Genre.name == new_genres).first()
+    
+    for new_gens in genres:
+      genre = Genre.query.filter(Genre.name == new_gen).first()
       artist.genres.append(genre)
 
     db.session.commit()
